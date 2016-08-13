@@ -1,0 +1,37 @@
+#!/bin/sh
+
+set -e
+
+DESTPOOL=$1
+DISK=$2
+DESTROOTFS=$DESTPOOL/ROOT/ubuntu
+
+if ! zpool list $DESTPOOL >/dev/null 2>&1; then
+	zpool import -N -R /mnt $DESTPOOL
+fi
+
+if [ "yes" != `zfs get -H -o value mounted $DESTROOTFS` ]; then
+	zfs mount $DESTROOTFS
+	mount -t proc proc /mnt/proc
+	mount -t sysfs sysfs /mnt/sys
+	mount -t devtmpfs udev /mnt/dev
+fi
+
+chroot /mnt apt-get install --yes zfs-initramfs grub-pc
+perl -i -p -e 's/^(GRUB_HIDDEN_TIMEOUT.+)/#$1/;        # disable hidden timeout
+  /^GRUB_CMDLINE_LINUX_DEFAULT/ and s/quiet splash//;  # disable quiet,splash
+  s/^#\s*(GRUB_TERMINAL=console)/$1/;                  # enable console
+  ' /mnt/etc/default/grub
+
+chroot /mnt ln -fs $DISK /dev # needed to work around a grub bug
+test zfs = `chroot /mnt grub-probe /`
+chroot /mnt update-initramfs -c -k all
+chroot /mnt update-grub
+test 'Installing for i386-pc platform.
+Installation finished. No error reported.' = "`chroot /mnt grub-install $DISK 2>&1`"
+
+zfs snapshot $DESTPOOL@install-grub
+
+umount /mnt/proc
+umount /mnt/sys
+umount /mnt/dev

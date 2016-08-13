@@ -1,0 +1,79 @@
+#!/bin/sh
+
+set -e
+
+# Create an empty zool with a rootfs, swap, and various empty datasets that are
+# intended to be "local", meaning their contents don't need to be preserved or
+# synced.
+
+# There are two use cases for running this command.  First, when you create
+# your very first Xenial root zfs image.  Second, when you create a duplicate,
+# e.g. for a backup key.  As a result, neither home nor ubuntu datasets are
+# built here.
+
+# export DESTPOOL=zal2
+DESTPOOL=$1
+DISK=$2
+
+if ! echo $DISK | grep -q '^\/dev\/disk\/by-id\/.*' ; then
+	echo "Disk device must of the form /dev/disk/by-id/name" 1>&2
+	exit 1
+fi
+
+if zpool list $DESTPOOL >/dev/null 2>&1; then
+	echo "pool $DESTPOOL already exists, choose another or destroy it first" 1>&2
+	exit 1
+fi
+
+# optional tuneables
+export DESTPOOLOPTS="-o ashift=12 -O atime=off -O compression=lz4"
+export SWAPVOLSIZE=2G
+export SWAPVOLOPTS="-b $(getconf PAGESIZE) -o compression=zle -o logbias=throughput -o sync=always -o primarycache=metadata -o secondarycache=none -o org.complete.simplesnap:exclude=on"
+export EMPTYDATASETS="var/cache var/log var/spool var/tmp"
+
+# allocate the whole disk to ZFS; for a USB key you might want to reserve some space for a VFAT partition
+
+CURPART=`sfdisk -l /dev/sda |sed -e '1,/^Device/d'`
+if [ "$CURPART" = "" ]; then
+	# Allocate entire disk
+	echo - - bf \* | sfdisk $DISK
+	while ! test -b ${DISK}-part1; do
+		# without this zpool create returns "invalid vdev specification"
+		sleep 1
+	done
+elif [ 1 -ne `echo "$CURPART" | grep -c bf` ]; then
+	echo "Disk already contains partitions, and there isn't exactly one with with type 'bf'" 1>&2
+	exit 1
+fi
+
+#apt-add-repository universe
+#apt-get update
+#apt-get install --yes zfs
+
+zpool create -O mountpoint=/ -R /mnt -O canmount=off $DESTPOOLOPTS $DESTPOOL ${DISK}-part1
+# ROOT is just a container dataset, it should never contain data
+zfs create -o canmount=off -o mountpoint=none $DESTPOOL/ROOT
+
+# home is just a container, make a zfs dataset below this for every user, including root
+zfs create -o setuid=off $DESTPOOL/home 
+
+# TODO add option to send an existing set of var devices - may make sense in some use cases
+
+# var is just a container; we want any directories under /var to be part of $DESTROOTFS if
+# they're not created as separate datasets as we do here (cache, log, spool, tmp)
+zfs create -o canmount=off -o setuid=off  -o exec=off $DESTPOOL/var
+for i in $EMPTYDATASETS; do
+	zfs create $DESTPOOL/$i
+done
+
+# TODO when should we make swap?
+zfs create -V $SWAPVOLSIZE $SWAPVOLOPTS $DESTPOOL/swap 
+mkswap -f /dev/zvol/$DESTPOOL/swap
+
+zpool export $DESTPOOL
+#for i in $EMPTYDATASETS; do rmdir /mnt/$i done
+#rmdir /mnt/home
+rmdir /mnt/var
+        
+# TODO add option to zfs set -o exec=on $DESTPOOL/var/tmp
+

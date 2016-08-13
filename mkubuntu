@@ -1,0 +1,67 @@
+#!/bin/sh
+
+# This script is run when creating your first Xenial zfs root image, after
+# running mkzpool to create the pool and some of the datasets - all except for
+# home, ubuntu, and swap.  mkubuntu creates a minimal bootable ROOT/ubuntu
+# dataset and installs grub.  
+
+set -e
+
+DESTPOOL=$1
+DISK=$2
+
+DESTROOTFS=$DESTPOOL/ROOT/ubuntu
+SNAP_DEBOOTSTRAP=$DESTROOTFS@install-debootstrap
+SNAP_KERNEL=$DESTROOTFS@install-kernel
+
+if ! zfs list $SNAP_DEBOOTSTRAP >/dev/null 2>&1; then
+	# MOUNT
+	zpool import -N -R /mnt $DESTPOOL
+	zfs create -o canmount=noauto -o mountpoint=/ $DESTROOTFS
+	zfs mount $DESTROOTFS
+	zfs mount -a # TODO this could have unintended consequences in a non-livecd context
+	test -d /mnt/var/tmp || mkdir /mnt/var/tmp
+	chmod 1777 /mnt/var/tmp
+
+	# BOOTSTRAP
+	apt-get install --yes debootstrap
+	debootstrap xenial /mnt
+	zfs set devices=off $DESTPOOL
+	zfs snapshot $SNAP_DEBOOTSTRAP
+fi
+
+if ! zfs list $SNAP_KERNEL >/dev/null 2>&1; then
+	# MISC
+	echo /dev/zvol/$DESTPOOL/swap none swap defaults 0 0 > /mnt/etc/fstab
+	echo root:temprootpw | chroot /mnt chpasswd
+	chroot /mnt locale-gen en_US.UTF-8
+	echo 'LANG="en_US.UTF-8"' > /mnt/etc/default/locale
+	chroot /mnt addgroup --system lpadmin
+	chroot /mnt addgroup --system sambashare
+
+	ln -s /proc/self/mounts /mnt/etc/mtab
+	mount -t proc proc /mnt/proc
+	mount -t sysfs sysfs /mnt/sys
+	mount -t devtmpfs udev /mnt/dev
+	chroot /mnt dpkg-reconfigure tzdata
+
+	# KERNEL
+	cat - > /mnt/etc/apt/sources.list <<EOF
+deb http://archive.ubuntu.com/ubuntu xenial main universe
+deb-src http://archive.ubuntu.com/ubuntu xenial main universe
+deb http://security.ubuntu.com/ubuntu xenial-security main universe
+deb-src http://security.ubuntu.com/ubuntu xenial-security main universe
+deb http://archive.ubuntu.com/ubuntu xenial-updates main universe
+deb-src http://archive.ubuntu.com/ubuntu xenial-updates main universe
+EOF
+	chroot /mnt apt-get update
+	chroot /mnt apt-get install --yes ubuntu-minimal openssh-server
+	chroot /mnt apt-get install --yes --no-install-recommends linux-image-generic
+
+	zfs snapshot $SNAP_KERNEL
+
+	# TODO execute these on exit trap too
+	umount /mnt/proc
+	umount /mnt/sys
+	umount /mnt/dev
+fi
