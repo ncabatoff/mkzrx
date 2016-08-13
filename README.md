@@ -1,6 +1,6 @@
-# mkzrx - make zfs root xenian
+# mkzrx - make zfs root xenial
 
-Ubuntu 16.04 LTS ("Xenian") has builtin support for ZFS-on-root.  However, the
+Ubuntu 16.04 LTS ("Xenial") has builtin support for ZFS-on-root.  However, the
 installer does not support it.  There are some [great
 instructions](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS)
 on how to do it but it's not for the faint of heart.  This repo contains
