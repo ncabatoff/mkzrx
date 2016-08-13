@@ -12,10 +12,16 @@ fi
 
 if [ "yes" != `zfs get -H -o value mounted $DESTROOTFS` ]; then
 	zfs mount $DESTROOTFS
-	mount -t proc proc /mnt/proc
-	mount -t sysfs sysfs /mnt/sys
-	mount -t devtmpfs udev /mnt/dev
 fi
+
+umount /mnt/proc 2>/dev/null || true
+mount -t proc proc /mnt/proc
+
+umount /mnt/sys 2>/dev/null || true
+mount -t sysfs sysfs /mnt/sys
+
+umount /mnt/dev 2>/dev/null || true
+mount -t devtmpfs udev /mnt/dev
 
 chroot /mnt apt-get install --yes zfs-initramfs grub-pc
 perl -i -p -e 's/^(GRUB_HIDDEN_TIMEOUT.+)/#$1/;        # disable hidden timeout
@@ -30,7 +36,7 @@ chroot /mnt update-grub
 test 'Installing for i386-pc platform.
 Installation finished. No error reported.' = "`chroot /mnt grub-install $DISK 2>&1`"
 
-zfs snapshot $DESTPOOL@install-grub
+zfs snapshot $DESTROOTFS@install-grub
 
 umount /mnt/proc
 umount /mnt/sys
