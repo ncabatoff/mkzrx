@@ -44,7 +44,7 @@ export EMPTYDSOPTS="-o com.sun:auto-snapshot=false -o org.complete.simplesnap:ex
 
 # allocate the whole disk to ZFS; for a USB key you might want to reserve some space for a VFAT partition
 
-CURPART=`sfdisk -l /dev/sda |sed -e '1,/^Device/d'`
+CURPART=`sfdisk -l $DISK |sed -e '1,/^Device/d'`
 if [ "$CURPART" = "" ]; then
 	# Allocate entire disk
 	echo - - bf \* | sfdisk $DISK
