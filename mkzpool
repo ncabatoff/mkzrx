@@ -26,10 +26,21 @@ if zpool list $DESTPOOL >/dev/null 2>&1; then
 fi
 
 # optional tuneables
-export DESTPOOLOPTS="-o ashift=12 -O atime=off -O compression=lz4"
+export DESTPOOLOPTS="-o ashift=12 -O atime=off -O compression=lz4 \
+         -d -o feature@async_destroy=enabled \
+         -o feature@empty_bpobj=enabled \
+         -o feature@filesystem_limits=enabled \
+         -o feature@lz4_compress=enabled \
+         -o feature@spacemap_histogram=enabled \
+         -o feature@extensible_dataset=enabled \
+         -o feature@bookmarks=enabled \
+         -o feature@enabled_txg=enabled \
+         -o feature@embedded_data=enabled \
+         -o feature@large_blocks=enabled "
 export SWAPVOLSIZE=2G
 export SWAPVOLOPTS="-b $(getconf PAGESIZE) -o compression=zle -o logbias=throughput -o sync=always -o primarycache=metadata -o secondarycache=none -o org.complete.simplesnap:exclude=on"
-export EMPTYDATASETS="var/cache var/log var/spool var/tmp"
+export EMPTYDATASETS="var/cache var/log var/spool var/tmp var/backups var/lib/docker var/lib/NetworkManager"
+export EMPTYDSOPTS="-o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on"
 
 # allocate the whole disk to ZFS; for a USB key you might want to reserve some space for a VFAT partition
 
@@ -62,8 +73,9 @@ zfs create -o setuid=off $DESTPOOL/home
 # var is just a container; we want any directories under /var to be part of $DESTROOTFS if
 # they're not created as separate datasets as we do here (cache, log, spool, tmp)
 zfs create -o canmount=off -o setuid=off  -o exec=off $DESTPOOL/var
+zfs create -o canmount=off $DESTPOOL/var/lib
 for i in $EMPTYDATASETS; do
-	zfs create $DESTPOOL/$i
+	zfs create $EMPTYDSOPTS $DESTPOOL/$i
 done
 
 # TODO when should we make swap?
@@ -73,6 +85,7 @@ mkswap -f /dev/zvol/$DESTPOOL/swap
 zpool export $DESTPOOL
 #for i in $EMPTYDATASETS; do rmdir /mnt/$i done
 #rmdir /mnt/home
+rmdir /mnt/var/lib
 rmdir /mnt/var
         
 # TODO add option to zfs set -o exec=on $DESTPOOL/var/tmp
