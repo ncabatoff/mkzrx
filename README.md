@@ -132,7 +132,19 @@ Note the name of the interface other than lo0.  Supposing it's enp1s0 as in my c
 Once you have network connectivity, follow "Step 8: Full Software Installation" from the
 [guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS).  Optionally do Step 9
 as well.  Note that mkubuntu creates several extra snapshots besides the ones the guide does.
-I don't see much value in removing them, but it's your call.
+I don't see much value in removing them, but it's your call.  In fact I like to do another snapshot
+right after step 8:
+
+    zfs snapshot zal2/ROOT/ubuntu@install-desktop
+
+I also suggest after installing ubuntu-desktop but before you reboot that you might want to run:
+
+    zfs create -o canmount=off zal2/var/lib/lightdm
+    zfs create -o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on zal2/var/lib/lightdm/.cache 
+    chown lightdm:lightdm zal2/var/lib/lightdm/.cache
+
+I found it was another directory like /var/lib/NetworkManager and /var/backups that showed a lot of
+activity in my regular snapshots, and that I wanted to exclude from them.
 
 ## Other uses
 
