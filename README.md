@@ -17,47 +17,6 @@ compatability I use regular old DOS MBR partitions.
 Second, there's a bug in the current Grub which can be worked around by
 symlinking the disk device into /dev, so I do that.
 
-## The scripts
-
-### mkzpool
-
-mkzpool is a simple script to create a root zpool and some container datasets.
-It will also partition the disk if there isn't already a partition table.
-You might want to pre-create a partition table if you want to reserve some space.
-For example, on a USB key it might make sense to save some room for a VFAT partition.
-I've only tested the code in this repo with the first partition assigned to ZFS.
-If you take this route, the partition must be of type 'bf'.
-
-To run it simply give it the poolname and device name, for example:
-
-    ./mkzpool zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
-
-I suggest not using a generic name like 'rpool', but rather to name it after the
-machine's hostname.  This will make it easier to manage if you ever want to have
-the disks coexist in the same machine.  On the other hand, the advantage to using
-a generic name is that it's one less customization, making it easier to synchronize
-your diverse hosts using nothing more than zfs send.
-
-### mkubuntu
-
-mkubuntu is invoked in the same way as mkzpool:
-
-    ./mkubuntu zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
-
-This does the OS installation onto the pool created by mkzpool.  mkubuntu
-creates a minimal bootable ROOT/ubuntu dataset and installs grub.  There are
-two interactive bits: you'll have to provide your timezone and tell grub what
-disk to install on.  (I'm working on eliminating those dialogs to further
-automate the process.)  
-
-### mkgrub
-
-mkgrub is invoked in the same way as mkzpool:
-
-    ./mkgrub zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
-
-This makes the zpool bootable.
-
 ## Warning
 
 If you run these scripts on a machine with data you care about, you might lose
@@ -205,4 +164,45 @@ Example of this process:
     zfs send -R zal2/home  | zfs recv -d zal1
     ./mkgrub zal1 /dev/disk/by-id/ata-ADATA_SX900_7D4120000612 
     zpool export zal1
+
+## The scripts
+
+### mkzpool
+
+mkzpool is a simple script to create a root zpool and some container datasets.
+It will also partition the disk if there isn't already a partition table.
+You might want to pre-create a partition table if you want to reserve some space.
+For example, on a USB key it might make sense to save some room for a VFAT partition.
+I've only tested the code in this repo with the first partition assigned to ZFS.
+If you take this route, the partition must be of type 'bf'.
+
+To run it simply give it the poolname and device name, for example:
+
+    ./mkzpool zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
+
+I suggest not using a generic name like 'rpool', but rather to name it after the
+machine's hostname.  This will make it easier to manage if you ever want to have
+the disks coexist in the same machine.  On the other hand, the advantage to using
+a generic name is that it's one less customization, making it easier to synchronize
+your diverse hosts using nothing more than zfs send.
+
+### mkubuntu
+
+mkubuntu is invoked in the same way as mkzpool:
+
+    ./mkubuntu zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
+
+This does the OS installation onto the pool created by mkzpool.  mkubuntu
+creates a minimal bootable ROOT/ubuntu dataset and installs grub.  There are
+two interactive bits: you'll have to provide your timezone and tell grub what
+disk to install on.  (I'm working on eliminating those dialogs to further
+automate the process.)  
+
+### mkgrub
+
+mkgrub is invoked in the same way as mkzpool:
+
+    ./mkgrub zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
+
+This makes the zpool bootable.
 
