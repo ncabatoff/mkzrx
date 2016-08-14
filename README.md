@@ -60,10 +60,11 @@ This makes the zpool bootable.
 
 ## Warning
 
-If you run these scripts on a machine with data you care about, you might lose it.  I've tested them extensively
-but there's no reason to assume I found all the bugs.
+If you run these scripts on a machine with data you care about, you might lose
+it.  I've tested them extensively but there's no reason to assume I found all
+the bugs.
 
-There is a safe way to run this: from an [Ubuntu Live CD or USB key](https://help.ubuntu.com/community/LiveCD).
+Play it safe and boot from an [Ubuntu Live CD or USB key](https://help.ubuntu.com/community/LiveCD).
 You want the [64-bit Ubuntu 16.04 Xenial Live CD](http://releases.ubuntu.com/16.04/ubuntu-16.04-desktop-amd64.iso).
 
 Boot it on a machine with no disks containing data you would mind losing.
@@ -77,17 +78,21 @@ You get dropped to a black screen saying
 
 Just type "live" (no quotes) and hit enter.
 
-Follow Step 1 from the
-[guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS) on
-which this is based.  Then scp these scripts onto the target machine.
-
-Alternatively, if you like to live dangerously, you can run them directly on an
-existing Ubuntu 16.04 installation, e.g. if you already did a non-ZFS install.
-In which case: *BACKUP YOUR DATA* first, to another machine.
-
 ## Usage
 
-From the livecd environment, after doing Step 1:
+### From Booted LiveCD
+
+Hit Ctrl-Alt-T to open a terminal.
+
+Follow Step 1 from the
+[guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS) on
+which this is based.  Then scp or wget these scripts onto the target machine.
+
+In these examples my hostname is zal, and I'm calling this pool zal2.
+I'm building it on a USB key, but it could also be an SSD or HDD.
+
+You must remove all partitions on the target device before calling these scripts,
+or have exactly one ZFS (type BF) partition that isn't already part of a pool.
 
     ./mkzpool zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
     ./mkubuntu zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
@@ -101,50 +106,80 @@ Your root password is set to 'temprootpw', you probably want to change that:
 
     chroot /mnt passwd root
 
-Optionally:
+### Setup temporary network (optional)
 
     ( echo auto eth0; echo iface eth0 inet dhcp ) > /mnt/etc/network/interfaces.d/eth0
 
-This may not work for you depending on your hardware;in my case I had to use enp1s0 
+This may not work for you depending on your hardware; in my case I had to use enp1s0 
 instead of eth0.  You may prefer to skip this step and just manually run dhclient upon
 reboot as described below.  The guide points out that if you're running Ubuntu Desktop
 (rather than Server) you should be using NetworkManager and thus you'll want to remove
 this file after the reboot.
 
-Now export:
+### First boot
+
+Export your new zpool and reboot.
 
     zpool export zal2
+    reboot
 
 Not strictly required, but highly recommended: follow "Step 6: First Boot" from
 the [guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS),
-starting with "6.4 Reboot".  You'll need to setup a user account sooner or
-later anyway.
+starting with 6.5 "Wait for the newly installed system to boot normally. Login
+as root."  You'll need to setup a user account sooner or later anyway.
 
-It may not come up on the network, especially if you skipped the optional step to
-create /etc/network/interfaces.d/eth0.  In that case, login to the console and run
+If you're not on the network after the reboot, find your desired network interface, e.g. with
 
     /sbin/ifconfig -a
 
-Note the name of the interface other than lo0.  Supposing it's enp1s0 as in my case, run
+Supposing it's enp1s0 as in my case, run
 
     dhclient enp1s0
 
 Once you have network connectivity, follow "Step 8: Full Software Installation" from the
 [guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS).  Optionally do Step 9
 as well.  Note that mkubuntu creates several extra snapshots besides the ones the guide does.
-I don't see much value in removing them, but it's your call.  In fact I like to do another snapshot
-right after step 8:
+I don't see much value in removing them, but it's your call.  I also like to do another snapshot now:
 
     zfs snapshot zal2/ROOT/ubuntu@install-desktop
 
-I also suggest after installing ubuntu-desktop but before you reboot that you might want to run:
+Before rebooting, maybe:
 
     zfs create -o canmount=off zal2/var/lib/lightdm
     zfs create -o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on zal2/var/lib/lightdm/.cache 
     chown lightdm:lightdm zal2/var/lib/lightdm/.cache
 
-I found it was another directory like /var/lib/NetworkManager and /var/backups that showed a lot of
-activity in my regular snapshots, and that I wanted to exclude from them.
+I found this was another directory like /var/lib/NetworkManager and
+/var/backups that showed a lot of activity in my regular snapshots, and that I
+wanted to exclude from them.  We're not talking a lot of data, mind you, it's
+mostly just the noise.  If I'm not doing much of anything on my system I'd rather
+see zero activity in my traffic metrics.
+
+### Docker
+
+In principle there's no reason that /var/lib/docker should be part of the root
+dataset.  It too generates lots of activity, at least on my system.  Not a
+large volume of data, just a steady stream.  Any data I care about involving
+docker is in the form of volumes, which is another fs in my setup
+(zal2/data/docker).  
+
+If you make /var/lib/docker a zfs dataset, Docker will stop working.  The easy
+solution I found was to enable ZFS storage in Docker:
+
+    root@xal:/etc/default# git diff -r 55d29aa3e2af41f39b925d4b899fc562a7a7f7ff .
+    diff --git a/default/docker b/default/docker
+    index da23c57..0b0b0c6 100644
+    --- a/default/docker
+    +++ b/default/docker
+    @@ -11,7 +11,7 @@
+     #DOCKER="/usr/local/bin/docker"
+     
+     # Use DOCKER_OPTS to modify the daemon startup options.
+    -#DOCKER_OPTS="--dns 8.8.8.8 --dns 8.8.4.4"
+    +DOCKER_OPTS="-s zfs"
+     
+This is the first time I've tried this, I've done almost no testing, so watch out,
+but so far so good.
 
 ## Other uses
 
@@ -160,9 +195,14 @@ swap device (since I used a different name for the root pool), rebooted, and I
 was good to go.
 
 I repeated the same process when I bought a fast USB key to use as a backup, so
-that when travelling if something goes wrong my harddisk I have a fallback.  
+that when travelling if something goes wrong with my harddisk I have a fallback.  
 
-Example of the send process:
+Example of this process:
 
-    zfs send -R zal1/ROOT/ubuntu@install-desktop  | zfs recv -d zal2
+    ./mkzpool zal1 /dev/disk/by-id/ata-ADATA_SX900_7D4120000612 
+    zpool import -N -R /mnt zal1
+    zfs send -R zal2/ROOT/ubuntu@install-desktop  | zfs recv -d zal1
+    zfs send -R zal2/home  | zfs recv -d zal1
+    ./mkgrub zal1 /dev/disk/by-id/ata-ADATA_SX900_7D4120000612 
+    zpool export zal1
 
