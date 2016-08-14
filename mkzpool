@@ -39,7 +39,7 @@ export DESTPOOLOPTS="-o ashift=12 -O atime=off -O compression=lz4 \
          -o feature@large_blocks=enabled "
 export SWAPVOLSIZE=2G
 export SWAPVOLOPTS="-b $(getconf PAGESIZE) -o compression=zle -o logbias=throughput -o sync=always -o primarycache=metadata -o secondarycache=none -o org.complete.simplesnap:exclude=on"
-export EMPTYDATASETS="var/cache var/log var/spool var/tmp var/backups var/lib/docker var/lib/NetworkManager"
+export EMPTYDATASETS="var/cache var/log var/spool var/tmp var/backups var/lib/NetworkManager" # var/lib/docker 
 export EMPTYDSOPTS="-o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on"
 
 # allocate the whole disk to ZFS; for a USB key you might want to reserve some space for a VFAT partition
