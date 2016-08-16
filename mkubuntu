@@ -8,7 +8,13 @@
 set -e
 
 DESTPOOL=$1
-DISK=$2
+if ! zpool list $DESTPOOL >/dev/null 2>&1; then
+	zpool import -N -R /mnt $DESTPOOL >/dev/null 2>&1 || true
+	if ! zpool list $DESTPOOL >/dev/null 2>&1; then
+		echo "pool $DESTPOOL does not exist" 1>&2
+		exit 1
+	fi
+fi
 
 DESTROOTFS=$DESTPOOL/ROOT/ubuntu
 SNAP_DEBOOTSTRAP=$DESTROOTFS@install-debootstrap
@@ -16,7 +22,6 @@ SNAP_KERNEL=$DESTROOTFS@install-kernel
 
 if ! zfs list $SNAP_DEBOOTSTRAP >/dev/null 2>&1; then
 	# MOUNT
-	zpool import -N -R /mnt $DESTPOOL
 	zfs create -o canmount=noauto -o mountpoint=/ $DESTROOTFS
 	zfs mount $DESTROOTFS
 	zfs mount -a # TODO this could have unintended consequences in a non-livecd context
@@ -31,19 +36,21 @@ if ! zfs list $SNAP_DEBOOTSTRAP >/dev/null 2>&1; then
 fi
 
 if ! zfs list $SNAP_KERNEL >/dev/null 2>&1; then
+	umount /mnt/proc || true
+	mount -t proc proc /mnt/proc
+	umount /mnt/sys || true
+	mount -t sysfs sysfs /mnt/sys
+	umount /mnt/dev || true
+	mount -t devtmpfs udev /mnt/dev
+
 	# MISC
-	echo /dev/zvol/$DESTPOOL/swap none swap defaults 0 0 > /mnt/etc/fstab
 	echo root:temprootpw | chroot /mnt chpasswd
 	chroot /mnt locale-gen en_US.UTF-8
 	echo 'LANG="en_US.UTF-8"' > /mnt/etc/default/locale
 	chroot /mnt addgroup --system lpadmin
 	chroot /mnt addgroup --system sambashare
 
-	ln -s /proc/self/mounts /mnt/etc/mtab
-	mount -t proc proc /mnt/proc
-	mount -t sysfs sysfs /mnt/sys
-	mount -t devtmpfs udev /mnt/dev
-	chroot /mnt dpkg-reconfigure tzdata
+	ln -fs /proc/self/mounts /mnt/etc/mtab
 
 	# KERNEL
 	cat - > /mnt/etc/apt/sources.list <<EOF
@@ -55,8 +62,14 @@ deb http://archive.ubuntu.com/ubuntu xenial-updates main universe
 deb-src http://archive.ubuntu.com/ubuntu xenial-updates main universe
 EOF
 	chroot /mnt apt-get update
-	chroot /mnt apt-get install --yes ubuntu-minimal openssh-server
+	chroot /mnt apt-get install --yes ubuntu-minimal openssh-server etckeeper
 	chroot /mnt apt-get install --yes --no-install-recommends linux-image-generic
+
+	echo /dev/zvol/$DESTPOOL/swap none swap defaults 0 0 > /mnt/etc/fstab
+	chroot /mnt etckeeper commit "add swap to fstab"
+
+	#chroot /mnt dpkg-reconfigure tzdata
+	#chroot /mnt etckeeper commit "set timezone"
 
 	zfs snapshot $SNAP_KERNEL
 
