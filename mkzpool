@@ -57,9 +57,7 @@ elif [ 1 -ne `echo "$CURPART" | grep -c bf` ]; then
 	exit 1
 fi
 
-#apt-add-repository universe
-#apt-get update
-#apt-get install --yes zfs
+apt-get install --yes zfsutils-linux
 
 zpool create -O mountpoint=/ -R /mnt -O canmount=off $DESTPOOLOPTS $DESTPOOL ${DISK}-part1
 # ROOT is just a container dataset, it should never contain data
