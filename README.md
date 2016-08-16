@@ -102,7 +102,7 @@ I don't see much value in removing them, but it's your call.  I also like to do 
 
     zfs snapshot zal2/ROOT/ubuntu@install-desktop
 
-Before rebooting, maybe:
+Before rebooting into the GUI, maybe:
 
     zfs create -o canmount=off zal2/var/lib/lightdm
     zfs create -o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on zal2/var/lib/lightdm/.cache 
@@ -206,3 +206,15 @@ mkgrub is invoked in the same way as mkzpool:
 
 This makes the zpool bootable.
 
+## Vagrant
+
+I'm experimenting with doing tests using Vagrant.  If you install Vagrant 1.8.5 and VirtualBox 5.1,
+you should be able to, from this checkout, run:
+
+    vagrant up   # wait for it to exit
+    vagrant halt
+    VAGRANT_VAGRANTFILE=Vagrantfile.deleteOrigDisk vagrant up
+
+This will run the three scripts in a virtual environment, installing to a second virtual disk.
+The last step removes the original disk provisioned by Vagrant and will boot off the new
+zfs-on-root.  You won't be able to ssh to it mind you...  This is a proof of concept at this point.

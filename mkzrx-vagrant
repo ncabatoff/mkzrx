@@ -1,0 +1,16 @@
+#!/bin/sh
+
+poolname=$1
+
+set -e
+
+cd /dev/disk/by-id
+for i in *; do 
+  if [ `readlink $i` = "../../sdb" ]; then
+    disk=/dev/disk/by-id/$i
+    /home/vagrant/mkzpool $poolname $disk
+    /home/vagrant/mkubuntu $poolname $disk
+    /home/vagrant/mkgrub $poolname $disk
+  fi
+done
+exit 1
