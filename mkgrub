@@ -10,6 +10,8 @@ if ! zpool list $DESTPOOL >/dev/null 2>&1; then
 	zpool import -N -R /mnt $DESTPOOL
 fi
 
+zfs rollback $DESTROOTFS@install-kernel
+
 if [ "yes" != `zfs get -H -o value mounted $DESTROOTFS` ]; then
 	zfs mount $DESTROOTFS
 fi
@@ -23,13 +25,16 @@ mount -t sysfs sysfs /mnt/sys
 umount /mnt/dev 2>/dev/null || true
 mount -t devtmpfs udev /mnt/dev
 
-chroot /mnt apt-get install --yes zfs-initramfs grub-pc
+chroot /mnt apt-get update
+# TODO how do we avoid generating initramfs upon installation?  
+# We're just going to do it again in a moment...
+DEBIAN_FRONTEND=noninteractive chroot /mnt apt-get install --yes zfs-initramfs grub-pc
 perl -i -p -e 's/^(GRUB_HIDDEN_TIMEOUT.+)/#$1/;        # disable hidden timeout
   /^GRUB_CMDLINE_LINUX_DEFAULT/ and s/quiet splash//;  # disable quiet,splash
   s/^#\s*(GRUB_TERMINAL=console)/$1/;                  # enable console
   ' /mnt/etc/default/grub
 
-chroot /mnt ln -fs $DISK /dev # needed to work around a grub bug
+chroot /mnt ln -fs $DISK $DISK-part1 /dev # needed to work around a grub bug
 test zfs = `chroot /mnt grub-probe /`
 chroot /mnt update-initramfs -c -k all
 chroot /mnt update-grub
