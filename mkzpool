@@ -20,7 +20,22 @@ if ! echo $DISK | grep -q '^\/dev\/disk\/by-id\/.*' ; then
 	exit 1
 fi
 
+zpool import $DESTPOOL >/dev/null 2>&1 || true
 if zpool list $DESTPOOL >/dev/null 2>&1; then
+	DESTROOTFS=$DESTPOOL/ROOT/ubuntu
+	SNAP_DEBOOTSTRAP=$DESTROOTFS@install-debootstrap
+	if zfs list $SNAP_DEBOOTSTRAP >/dev/null 2>&1; then
+		# Generally speaking we require the user to destroy $DESTPOOL
+		# if they want to re-run the script.  If we see a snapshot
+		# created by mkubuntu though, we'll assume that something went
+		# wrong and the user is re-running the full set of scripts.
+		# In that case there's nothing for us to do here in mkzpool.
+		exit 0
+	fi
+
+	# The 'trap' (below) should've destroyed the zpool if something went wrong
+	# in a previous mkzpool invocation.  As such, the user must destroy a pre-existing
+	# zpool with the desired name, we won't do it for them.
 	echo "pool $DESTPOOL already exists, choose another or destroy it first" 1>&2
 	exit 1
 fi
@@ -39,7 +54,7 @@ export DESTPOOLOPTS="-o ashift=12 -O atime=off -O compression=lz4 \
          -o feature@large_blocks=enabled "
 export SWAPVOLSIZE=2G
 export SWAPVOLOPTS="-b $(getconf PAGESIZE) -o compression=zle -o logbias=throughput -o sync=always -o primarycache=metadata -o secondarycache=none -o org.complete.simplesnap:exclude=on"
-export EMPTYDATASETS="var/cache var/log var/spool var/tmp var/backups var/lib/NetworkManager" # var/lib/docker 
+export EMPTYDATASETS="var/cache var/log var/spool var/tmp var/backups"
 export EMPTYDSOPTS="-o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on"
 
 # allocate the whole disk to ZFS; for a USB key you might want to reserve some space for a VFAT partition
@@ -57,14 +72,35 @@ elif [ 1 -ne `echo "$CURPART" | grep -c bf` ]; then
 	exit 1
 fi
 
+apt-get update
 apt-get install --yes zfsutils-linux
+find /mnt -depth -type d -exec rmdir {} \;
 
 zpool create -O mountpoint=/ -R /mnt -O canmount=off $DESTPOOLOPTS $DESTPOOL ${DISK}-part1
+
+# This zpool destroy command will fail if we reached the end of the script
+# without errors and exported $DESTPOOL, which is what's desired.  If something
+# else goes wrong, we'll destroy the imperfect zpool so that the user can
+# re-run the script after fixing the problem.  Obviously this can make
+# debugging the issue thornier, so you might want to comment out this line if
+# you're having problems.  You may ask, "why not just use a snapshot to flag
+# success" like is done in the other scripts?  That's a valid approach, but my
+# thinking is that the other scripts are relying on this one having completed
+# successfully, and are piggybacking on its safety checks.  As the first
+# script, this one should be somewhat more exacting: we require that the user
+# have an empty disk, or failing that a pre-partitioned disk with a single BF
+# partition that isn't part of a zpool.  We don't want to lose valid data, and
+# I believe those preconditions basically guarantee that (unless someone was
+# using a BF partition for non-ZFS purposes, which I'm willing to tolerate as a
+# failure mode.)
+trap "zpool destroy $DESTPOOL >/dev/null 2>&1 || true" EXIT
+
 # ROOT is just a container dataset, it should never contain data
 zfs create -o canmount=off -o mountpoint=none $DESTPOOL/ROOT
 
 # home is just a container, make a zfs dataset below this for every user, including root
 zfs create -o setuid=off $DESTPOOL/home 
+zfs create -o mountpoint=/root $DESTPOOL/home/root
 
 # TODO add option to send an existing set of var devices - may make sense in some use cases
 
@@ -82,9 +118,8 @@ mkswap -f /dev/zvol/$DESTPOOL/swap
 
 zpool export $DESTPOOL
 #for i in $EMPTYDATASETS; do rmdir /mnt/$i done
-#rmdir /mnt/home
-rmdir /mnt/var/lib
-rmdir /mnt/var
+test -d /mnt/root && rmdir /mnt/root
+test -d /mnt/var && rmdir /mnt/var
         
 # TODO add option to zfs set -o exec=on $DESTPOOL/var/tmp
 
