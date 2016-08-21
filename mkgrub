@@ -5,12 +5,18 @@ set -e
 DESTPOOL=$1
 DISK=$2
 DESTROOTFS=$DESTPOOL/ROOT/ubuntu
+SNAP_GRUB=$DESTROOTFS@install-grub
+SNAP_MKUBUNTU=$DESTROOTFS@install-kernel
 
 if ! zpool list $DESTPOOL >/dev/null 2>&1; then
 	zpool import -N -R /mnt $DESTPOOL
 fi
 
-zfs rollback $DESTROOTFS@install-kernel
+if zfs list $SNAP_GRUB >/dev/null 2>&1; then
+	exit
+fi
+
+zfs rollback $SNAP_MKUBUNTU
 
 if [ "yes" != `zfs get -H -o value mounted $DESTROOTFS` ]; then
 	zfs mount $DESTROOTFS
@@ -41,7 +47,7 @@ chroot /mnt update-grub
 test 'Installing for i386-pc platform.
 Installation finished. No error reported.' = "`chroot /mnt grub-install $DISK 2>&1`"
 
-zfs snapshot $DESTROOTFS@install-grub
+zfs snapshot $SNAP_GRUB
 
 umount /mnt/proc
 umount /mnt/sys
