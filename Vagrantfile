@@ -6,7 +6,10 @@
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
 
-disk = './secondDisk.vdi'
+rpool = 'rpool'
+hostname = 'yourhostname'
+
+disk = './zfsxenial.vdi'
 Vagrant.configure(2) do |config|
   # The most common configuration options are documented and commented below.
   # For a complete reference, please see the online documentation at
@@ -15,6 +18,7 @@ Vagrant.configure(2) do |config|
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
   config.vm.box = "bento/ubuntu-16.04"
+  config.vm.hostname = hostname
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -54,7 +58,7 @@ Vagrant.configure(2) do |config|
 
     # Create a new 1GB disk (sdb)
     unless File.exist?(disk)
-      vb.customize ['createhd', '--filename', disk, '--variant', 'Fixed', '--size', 4 * 1024]
+      vb.customize ['createhd', '--filename', disk, '--variant', 'Fixed', '--size', 5*1024]
     end
     vb.customize ['storageattach', :id,  '--storagectl', 'SATA Controller', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', disk]
   end
@@ -77,8 +81,8 @@ Vagrant.configure(2) do |config|
   config.vm.provision "file", source: "mkgrub", destination: "mkgrub"
 
   config.vm.provision "shell" do |s|
-    s.path = "mkzpool-vagrant"
-    s.args = ["rpool"]
+    s.path = "mkzrx-vagrant"
+    s.args = [rpool]
   end
 end
 

@@ -6,7 +6,7 @@
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
 
-disk = './secondDisk.vdi'
+disk = './zfsxenial.vdi'
 
 Vagrant.configure(2) do |config|
   # The most common configuration options are documented and commented below.
