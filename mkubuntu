@@ -43,16 +43,12 @@ if ! zfs list $SNAP_KERNEL >/dev/null 2>&1; then
 	umount /mnt/dev || true
 	mount -t devtmpfs udev /mnt/dev
 
-	# MISC
-	echo root:temprootpw | chroot /mnt chpasswd
 	chroot /mnt locale-gen en_US.UTF-8
 	echo 'LANG="en_US.UTF-8"' > /mnt/etc/default/locale
-	chroot /mnt addgroup --system lpadmin
-	chroot /mnt addgroup --system sambashare
 
-	ln -fs /proc/self/mounts /mnt/etc/mtab
+	# If the user (or mkzrx-vagrant) setup an apt proxy e.g. for a local cache, preserve it in chroot too
+        cp /etc/apt/apt.conf.d/01proxy  /mnt/etc/apt/apt.conf.d > /dev/null 2>&1 || true
 
-	# KERNEL
 	cat - > /mnt/etc/apt/sources.list <<EOF
 deb http://archive.ubuntu.com/ubuntu xenial main universe
 deb-src http://archive.ubuntu.com/ubuntu xenial main universe
@@ -61,13 +57,18 @@ deb-src http://security.ubuntu.com/ubuntu xenial-security main universe
 deb http://archive.ubuntu.com/ubuntu xenial-updates main universe
 deb-src http://archive.ubuntu.com/ubuntu xenial-updates main universe
 EOF
+	ln -fs /proc/self/mounts /mnt/etc/mtab
 	chroot /mnt apt-get update
-	chroot /mnt apt-get install --yes ubuntu-minimal openssh-server etckeeper
+	chroot /mnt apt-get install --yes ubuntu-minimal openssh-server
 	chroot /mnt apt-get install --yes --no-install-recommends linux-image-generic
 
-	echo /dev/zvol/$DESTPOOL/swap none swap defaults 0 0 > /mnt/etc/fstab
-	chroot /mnt etckeeper commit "add swap to fstab"
+	chroot /mnt addgroup --system lpadmin
+	chroot /mnt addgroup --system sambashare
+	echo root:temprootpw | chroot /mnt chpasswd
 
+	echo /dev/zvol/$DESTPOOL/swap none swap defaults 0 0 > /mnt/etc/fstab
+
+	# Not setting timezone here because I can't figure out how to make it non-interactive.
 	#chroot /mnt dpkg-reconfigure tzdata
 	#chroot /mnt etckeeper commit "set timezone"
 
