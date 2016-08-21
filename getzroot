@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# This is a standalone helper script that isn't used in building a ZFS-on-root Ubuntu.
+# It's something I needed for my scripts that run on systems built that way, i.e.
+# have a $pool/ROOT/ubuntu root, where I want to know the pool name.  This is useful
+# to avoid hardcoding the pool name, so that these scripts can run on different hosts
+# with different root pool names.
+/bin/df -P / | sed -e 1d -e '/^[^/][^/]*\/ROOT\/ubuntu/s,\/.*,,'
