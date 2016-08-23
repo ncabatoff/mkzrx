@@ -6,17 +6,16 @@ DESTPOOL=$1
 DISK=$2
 DESTROOTFS=$DESTPOOL/ROOT/ubuntu
 SNAP_GRUB=$DESTROOTFS@install-grub
+SNAP_GRUBCFG=$DESTROOTFS@setup-grub
 SNAP_MKUBUNTU=$DESTROOTFS@install-kernel
 
 if ! zpool list $DESTPOOL >/dev/null 2>&1; then
 	zpool import -N -R /mnt $DESTPOOL
 fi
 
-if zfs list $SNAP_GRUB >/dev/null 2>&1; then
+if zfs list $SNAP_GRUBCFG >/dev/null 2>&1; then
 	exit
 fi
-
-zfs rollback $SNAP_MKUBUNTU
 
 if [ "yes" != `zfs get -H -o value mounted $DESTROOTFS` ]; then
 	zfs mount $DESTROOTFS
@@ -31,14 +30,19 @@ mount -t sysfs sysfs /mnt/sys
 umount /mnt/dev 2>/dev/null || true
 mount -t devtmpfs udev /mnt/dev
 
-chroot /mnt apt-get update
-# TODO how do we avoid generating initramfs upon installation?  
-# We're just going to do it again in a moment...
-DEBIAN_FRONTEND=noninteractive chroot /mnt apt-get install --yes zfs-initramfs grub-pc
-perl -i -p -e 's/^(GRUB_HIDDEN_TIMEOUT.+)/#$1/;        # disable hidden timeout
-  /^GRUB_CMDLINE_LINUX_DEFAULT/ and s/quiet splash//;  # disable quiet,splash
-  s/^#\s*(GRUB_TERMINAL=console)/$1/;                  # enable console
-  ' /mnt/etc/default/grub
+if ! zfs list $SNAP_GRUB >/dev/null 2>&1; then
+	zfs rollback $SNAP_MKUBUNTU
+
+	chroot /mnt apt-get update
+	# TODO how do we avoid generating initramfs upon installation?  
+	# We're just going to do it again in a moment...
+	DEBIAN_FRONTEND=noninteractive chroot /mnt apt-get install --yes zfs-initramfs grub-pc
+	perl -i -p -e 's/^(GRUB_HIDDEN_TIMEOUT.+)/#$1/;        # disable hidden timeout
+	  /^GRUB_CMDLINE_LINUX_DEFAULT/ and s/quiet splash//;  # disable quiet,splash
+	  s/^#\s*(GRUB_TERMINAL=console)/$1/;                  # enable console
+	  ' /mnt/etc/default/grub
+	zfs snapshot $SNAP_GRUB
+fi
 
 chroot /mnt ln -fs $DISK $DISK-part1 /dev # needed to work around a grub bug
 test zfs = `chroot /mnt grub-probe /`
@@ -47,7 +51,7 @@ chroot /mnt update-grub
 test 'Installing for i386-pc platform.
 Installation finished. No error reported.' = "`chroot /mnt grub-install $DISK 2>&1`"
 
-zfs snapshot $SNAP_GRUB
+zfs snapshot $SNAP_GRUBCFG
 
 umount /mnt/proc
 umount /mnt/sys

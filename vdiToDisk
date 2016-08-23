@@ -1,0 +1,34 @@
+#!/bin/sh
+
+set -e
+
+DESTPOOL=$1
+DISK=$2
+
+trap "rm zfsxenial.img 2>/dev/null || true" EXIT
+
+VBoxManage internalcommands converttoraw zfsxenial.vdi zfsxenial.img
+echo "Copying raw image to $DISK"
+cp zfsxenial.img $DISK
+
+echo "Redoing grub install for new disk"
+zpool import -N -R /mnt $DESTPOOL
+zfs destroy $DESTPOOL/ROOT/ubuntu@setup-grub
+./mkgrub $DESTPOOL $DISK
+zpool export $DESTPOOL
+
+# As part of resizing we need to copy the last 8MB from
+# the end of the current partition to the end of the new
+# partition.  Otherwise zpool may report corruption and
+# mark the pool FAULTED.
+
+set `sfdisk --dump $DISK |sed -e '1,/^$/d' -e 's/[^0-9 ]//g'`
+skip=`expr $2 + $3 - 16385`
+echo - - bf \* | sfdisk $DISK
+set `sfdisk --dump $DISK |sed -e '1,/^$/d' -e 's/[^0-9 ]//g'`
+seek=`expr $2 + $3 - 16385`
+dd bs=512 if=$DISK skip=$skip count=16384 | dd bs=512 of=$DISK seek=$seek
+
+zpool import -N $DESTPOOL
+zpool online -e $DESTPOOL $DISK
+zpool export $DESTPOOL
