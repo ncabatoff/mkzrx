@@ -4,7 +4,7 @@ Ubuntu 16.04 LTS ("Xenial") has builtin support for ZFS-on-root.  However, the
 installer does not support it.  There are some [great
 instructions](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS)
 on how to do it but it's not for the faint of heart.  This repo contains
-scripts to mostly automate the process.
+scripts to mostly automate the process, at least for steps 2-5 and 7.
 
 I recommend taking a look at the instructions if you want to better understand
 what we're doing or if you have problems with the scripts.
@@ -17,16 +17,22 @@ compatability I use regular old DOS MBR partitions.
 Second, there's a bug in the current Grub which can be worked around by
 symlinking the disk device into /dev, so I do that.
 
-## Warning
+There are also a slew of smaller changes, some of which may break things.  This
+is not 100% faithful to Richard Laager's instructions, and odds are any
+breakage is my doing and not his.
 
-If you run these scripts on a machine with data you care about, you might lose
-it.  I've tested them extensively but there's no reason to assume I found all
-the bugs.
+## Option 1: LiveCD Install Of Minimal Bootable System
 
-Play it safe and boot from an [Ubuntu Live CD or USB key](https://help.ubuntu.com/community/LiveCD).
+Boot from an [Ubuntu Live CD or USB key](https://help.ubuntu.com/community/LiveCD).
 You want the [64-bit Ubuntu 16.04 Xenial Live CD](http://releases.ubuntu.com/16.04/ubuntu-16.04-desktop-amd64.iso).
 
-Boot it on a machine with no disks containing data you would mind losing.
+### Danger
+
+Run this on a machine with no disks containing data you would mind losing.  It
+should be safe, but if there's a bug in these scripts and it damages your
+system, you get to keep both pieces.
+
+### Booting
 
 Note: there's a bug at present whereby the livecd doesn't boot up on its own.
 You get dropped to a black screen saying
@@ -37,9 +43,7 @@ You get dropped to a black screen saying
 
 Just type "live" (no quotes) and hit enter.
 
-## Usage
-
-### From Booted LiveCD
+### Running the scripts in the LiveCD Environment
 
 Hit Ctrl-Alt-T to open a terminal.
 
@@ -52,6 +56,8 @@ I'm building it on a USB key, but it could also be an SSD or HDD.
 
 You must remove all partitions on the target device before calling these scripts,
 or have exactly one ZFS (type BF) partition that isn't already part of a pool.
+
+As root:
 
     ./mkzpool zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
     ./mkubuntu zal2 /dev/disk/by-id/usb-SanDisk_Extreme_AA010607160347510209-0:0
@@ -75,12 +81,118 @@ reboot as described below.  The guide points out that if you're running Ubuntu D
 (rather than Server) you should be using NetworkManager and thus you'll want to remove
 this file after the reboot.
 
-### First boot
+### Reboot
 
 Export your new zpool and reboot.
 
     zpool export zal2
     reboot
+
+Remove the LiveCD disk/usbkey so you boot off your new install.
+Continue from "First boot with ZFS" ,below.
+
+## Option 2: Use Vagrant and VirtualBox Minimal Bootable System
+
+Tested with 1.8.5 and [VirtualBox
+5.0](https://www.virtualbox.org/wiki/Download_Old_Builds_5_0) (Vagrant 1.8.5 is
+the version available in CentOS7 and Ubuntu 16.04, but it doesn't yet support
+VirtualBox 5.1).
+
+This is still experimental, do the LiveCD option if you don't want to break
+anything.
+
+### Danger
+
+If you run these commands on a machine with data you care about, you might lose
+it.  I've tested them extensively but there's no reason to assume I found all
+the bugs.  The LiveCD option above is safer but requires more of your attention,
+whereas the Vagrant option is largely fire-and-forget.
+
+### Using a pool name other than rpool
+
+As described below under the mkzpool section, I suggest you not name the pool
+rpool.  For now this requires editing Vagrantfile; search for 'rpool' and
+replace it with your desired poolname.  You'll also have to modify the commands
+given in the following section accordingly.
+
+### Running the scripts in Vagrant
+
+First edit Vagrantfile to customize the lines at the top saying
+
+    rpool = 'rpool'
+    hostname = 'yourhostname'
+
+(only hostname is strictly required, you can leave rpool alone if you prefer.)
+
+Then from the same directory run
+
+    vagrant up   # wait for it to exit
+
+This will run the three scripts in a virtual environment, installing to a second virtual disk.
+You will see man errors in red such as
+
+    ==> default: perl: warning: Setting locale failed.
+    ==> default: perl: warning: Please check that your locale settings:
+    ==> default: 	LANGUAGE = "en_US:",
+    ==> default: 	LC_ALL = (unset),
+    ==> default: 	LC_COLLATE = "C",
+    ==> default: 	LANG = "en_US"
+    ==> default:     are supported and installed on your system.
+    ==> default: perl: warning: Falling back to the standard locale ("C").
+
+or
+
+    ==> default: dpkg-preconfigure: unable to re-open stdin: No such file or directory
+
+(among others.)  As far as I know these are harmless.  Upon success the command will
+finish with these lines (the numbers may differ):
+
+    ==> default: Generating grub configuration file ...
+    ==> default: Found linux image: /boot/vmlinuz-4.4.0-34-generic
+    ==> default: Found initrd image: /boot/initrd.img-4.4.0-34-generic
+    ==> default: done
+
+Now run
+
+    vagrant halt
+
+to shutdown the VM.  
+
+### Testing
+
+To test the result (i.e. that it can boot off the new ZFS install):
+
+    VAGRANT_VAGRANTFILE=Vagrantfile.deleteOrigDisk vagrant up
+
+This deletes the original ext4 disk provisioned by Vagrant, and boots off the
+new zfs-on-root VM.  Vagrant won't be able to work with it because we didn't
+persist any of the stuff that Vagrant installs to communicate with the VM.
+Instead use the VirtualBox GUI to login as root with password 'temprootpw' and
+satisfy yourself that all is in order.  Poweroff the guest using the VirtualBox
+GUI, since Vagrant has lost control of the VM (no need to save state).  
+
+### Installing the VirtualBox image on a real disk
+
+Now we need to move the disk image to real device.  You'll need to have zpool
+and zfs commands installed, see [the ZFS on Linux](http://zfsonlinux.org/) site
+for installation instructions if you haven't already done so.
+
+Since you're not running these commands in the VM, here's the first chance you
+have to mess up your existing setup.  
+
+*BE CAREFUL!  MAKE SURE YOU HAVE THE RIGHT TARGET DISK!*
+
+    ./vdiToDisk rpool /dev/disk/by-id/target-disk
+   
+Boot off /dev/disk/by-id/target-disk and continue immediately below with "First
+boot with ZFS".
+
+## First boot with ZFS
+
+Once you've managed to boot off your new minimal ZFS-on-root install, you've still
+got some setup to do.
+
+Login as root with password 'temprootpw' or whatever you reset it to.
 
 Not strictly required, but highly recommended: follow "Step 6: First Boot" from
 the [guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS),
@@ -91,9 +203,15 @@ If you're not on the network after the reboot, find your desired network interfa
 
     /sbin/ifconfig -a
 
+or
+
+    ip addr
+
 Supposing it's enp1s0 as in my case, run
 
     dhclient enp1s0
+
+to get yourself a network address via DHCP.
 
 Once you have network connectivity, follow "Step 8: Full Software Installation" from the
 [guide](https://github.com/zfsonlinux/zfs/wiki/Ubuntu-16.04-Root-on-ZFS).  Optionally do Step 9
@@ -101,18 +219,6 @@ as well.  Note that mkubuntu creates several extra snapshots besides the ones th
 I don't see much value in removing them, but it's your call.  I also like to do another snapshot now:
 
     zfs snapshot zal2/ROOT/ubuntu@install-desktop
-
-Before rebooting into the GUI, maybe:
-
-    zfs create -o canmount=off zal2/var/lib/lightdm
-    zfs create -o com.sun:auto-snapshot=false -o org.complete.simplesnap:exclude=on zal2/var/lib/lightdm/.cache 
-    chown lightdm:lightdm zal2/var/lib/lightdm/.cache
-
-I found this was another directory like /var/lib/NetworkManager and
-/var/backups that showed a lot of activity in my regular snapshots, and that I
-wanted to exclude from them.  We're not talking a lot of data, mind you, it's
-mostly just the noise.  If I'm not doing much of anything on my system I'd rather
-see zero activity in my traffic metrics.
 
 ### Docker
 
@@ -184,7 +290,7 @@ I suggest not using a generic name like 'rpool', but rather to name it after the
 machine's hostname.  This will make it easier to manage if you ever want to have
 the disks coexist in the same machine.  On the other hand, the advantage to using
 a generic name is that it's one less customization, making it easier to synchronize
-your diverse hosts using nothing more than zfs send.
+your diverse images using nothing more than zfs send.
 
 ### mkubuntu
 
@@ -206,15 +312,3 @@ mkgrub is invoked in the same way as mkzpool:
 
 This makes the zpool bootable.
 
-## Vagrant
-
-I'm experimenting with doing tests using Vagrant.  If you install Vagrant 1.8.5 and VirtualBox 5.1,
-you should be able to, from this checkout, run:
-
-    vagrant up   # wait for it to exit
-    vagrant halt
-    VAGRANT_VAGRANTFILE=Vagrantfile.deleteOrigDisk vagrant up
-
-This will run the three scripts in a virtual environment, installing to a second virtual disk.
-The last step removes the original disk provisioned by Vagrant and will boot off the new
-zfs-on-root.  You won't be able to ssh to it mind you...  This is a proof of concept at this point.
