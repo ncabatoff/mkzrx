@@ -58,7 +58,7 @@ Vagrant.configure(2) do |config|
 
     # Create a new 1GB disk (sdb)
     unless File.exist?(disk)
-      vb.customize ['createhd', '--filename', disk, '--variant', 'Fixed', '--size', 5*1024]
+      vb.customize ['createhd', '--filename', disk, '--variant', 'Fixed', '--size', 2*1024]
     end
     vb.customize ['storageattach', :id,  '--storagectl', 'SATA Controller', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', disk]
   end
